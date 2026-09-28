@@ -15,6 +15,7 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 1
+          ref: 2fbe35cee4e6dffb4f64dc4a08a7a70255fe333e
       - name: Verify exact PixelOS source
         run: test "$(git rev-parse HEAD)" = 2fbe35cee4e6dffb4f64dc4a08a7a70255fe333e
       - name: Install kernel build prerequisites
@@ -31,7 +32,7 @@ jobs:
           set -euo pipefail
           export PATH="$RUNNER_TEMP/aosp-clang/clang-r596125/bin:$PATH"
           make O=out ARCH=arm64 LLVM=1 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- vendor/kona-perf_defconfig
-          scripts/kconfig/merge_config.sh -m -O out out/.config             arch/arm64/configs/vendor/xiaomi/sm8250-common.config             arch/arm64/configs/vendor/xiaomi/alioth.config
+          scripts/kconfig/merge_config.sh -m -O out out/.config arch/arm64/configs/vendor/xiaomi/sm8250-common.config arch/arm64/configs/vendor/xiaomi/alioth.config
           make O=out ARCH=arm64 LLVM=1 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- olddefconfig
           grep -E '^(CONFIG_MACH_XIAOMI_ALIOTH|CONFIG_KALLSYMS_ALL|CONFIG_BUILD_ARM64_UNCOMPRESSED_KERNEL)=' out/.config
       - name: Build unmodified baseline
@@ -40,9 +41,9 @@ jobs:
           export PATH="$RUNNER_TEMP/aosp-clang/clang-r596125/bin:$PATH"
           make -j4 O=out ARCH=arm64 LLVM=1 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- Image
           test -s out/arch/arm64/boot/Image
-          grep -a -m1 'Linux version' out/arch/arm64/boot/Image | cut -c1-400
       - uses: actions/upload-artifact@v4
         with:
           name: alioth-baseline-image
           path: out/arch/arm64/boot/Image
           if-no-files-found: error
+          retention-days: 1
