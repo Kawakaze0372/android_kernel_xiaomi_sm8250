@@ -1,4 +1,4 @@
-name: Build PixelOS alioth kernel
+name: Build PixelOS alioth ReSukiSU kernel
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ permissions:
   contents: read
 
 jobs:
-  baseline:
+  resukisu:
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     steps:
@@ -27,15 +27,32 @@ jobs:
           git clone --depth 1 --filter=blob:none --sparse https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 "$RUNNER_TEMP/aosp-clang"
           git -C "$RUNNER_TEMP/aosp-clang" sparse-checkout set clang-r596125
           "$RUNNER_TEMP/aosp-clang/clang-r596125/bin/clang" --version | head -n 1
-      - name: Configure alioth kernel
+      - name: Integrate pinned ReSukiSU and reviewed hooks
+        run: |
+          set -euo pipefail
+          curl -fsSL https://raw.githubusercontent.com/Kawakaze0372/android_kernel_xiaomi_sm8250/b68b5359fedf723aed3dad2ff3993c0da39caac5/.github/alioth-resukisu.patch -o "$RUNNER_TEMP/alioth-resukisu.patch"
+          echo "6f2faa6e15a5b2ed3cb0748580e98b3333163473ac33860f5f175f7cc587a063  $RUNNER_TEMP/alioth-resukisu.patch" | sha256sum -c -
+          git apply --check "$RUNNER_TEMP/alioth-resukisu.patch"
+          git apply "$RUNNER_TEMP/alioth-resukisu.patch"
+          git clone --filter=blob:none https://github.com/ReSukiSU/ReSukiSU.git KernelSU
+          git -C KernelSU checkout fa8311f632a215b5381ec644627c6198d1e8a13e
+          test "$(git -C KernelSU rev-parse HEAD)" = fa8311f632a215b5381ec644627c6198d1e8a13e
+          ln -s ../KernelSU/kernel drivers/kernelsu
+          echo 'obj-$(CONFIG_KSU) += kernelsu/' >> drivers/Makefile
+          echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
+      - name: Configure alioth ReSukiSU kernel
         run: |
           set -euo pipefail
           export PATH="$RUNNER_TEMP/aosp-clang/clang-r596125/bin:$PATH"
           make O=out ARCH=arm64 LLVM=1 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- vendor/kona-perf_defconfig
           scripts/kconfig/merge_config.sh -m -O out out/.config arch/arm64/configs/vendor/xiaomi/sm8250-common.config arch/arm64/configs/vendor/xiaomi/alioth.config
+          scripts/config --file out/.config -e KSU -e KSU_MANUAL_HOOK -d KSU_TRACEPOINT_HOOK -d KSU_SUSFS
           make O=out ARCH=arm64 LLVM=1 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- olddefconfig
-          grep -E '^(CONFIG_MACH_XIAOMI_ALIOTH|CONFIG_KALLSYMS_ALL|CONFIG_BUILD_ARM64_UNCOMPRESSED_KERNEL)=' out/.config
-      - name: Build unmodified baseline
+          grep -qx 'CONFIG_KSU=y' out/.config
+          grep -qx 'CONFIG_KSU_MANUAL_HOOK=y' out/.config
+          grep -qx 'CONFIG_KALLSYMS_ALL=y' out/.config
+          grep -E '^(CONFIG_MACH_XIAOMI_ALIOTH|CONFIG_KSU|CONFIG_KSU_MANUAL_HOOK|CONFIG_KALLSYMS_ALL)=' out/.config
+      - name: Build ReSukiSU Image
         run: |
           set -euo pipefail
           export PATH="$RUNNER_TEMP/aosp-clang/clang-r596125/bin:$PATH"
@@ -43,7 +60,7 @@ jobs:
           test -s out/arch/arm64/boot/Image
       - uses: actions/upload-artifact@v4
         with:
-          name: alioth-baseline-image
+          name: alioth-pixelos-resukisu-image
           path: out/arch/arm64/boot/Image
           if-no-files-found: error
           retention-days: 1
