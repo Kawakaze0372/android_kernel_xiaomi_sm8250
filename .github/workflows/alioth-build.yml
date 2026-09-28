@@ -30,7 +30,7 @@ jobs:
       - name: Integrate pinned ReSukiSU and reviewed hooks
         run: |
           set -euo pipefail
-          curl -fsSL https://raw.githubusercontent.com/Kawakaze0372/android_kernel_xiaomi_sm8250/b68b5359fedf723aed3dad2ff3993c0da39caac5/.github/alioth-resukisu.patch -o "$RUNNER_TEMP/alioth-resukisu.patch"
+          curl -fsSL https://raw.githubusercontent.com/Kawakaze0372/android_kernel_xiaomi_sm8250/a686d61aefa5514456bcbb75bfad58212e3543f8/.github/alioth-resukisu.patch -o "$RUNNER_TEMP/alioth-resukisu.patch"
           echo "6f2faa6e15a5b2ed3cb0748580e98b3333163473ac33860f5f175f7cc587a063  $RUNNER_TEMP/alioth-resukisu.patch" | sha256sum -c -
           git apply --check "$RUNNER_TEMP/alioth-resukisu.patch"
           git apply "$RUNNER_TEMP/alioth-resukisu.patch"
