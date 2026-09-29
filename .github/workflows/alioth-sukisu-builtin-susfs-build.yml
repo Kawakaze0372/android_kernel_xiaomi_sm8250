@@ -28,8 +28,10 @@ jobs:
           test "$(git -C kernel rev-parse HEAD)" = 2fbe35cee4e6dffb4f64dc4a08a7a70255fe333e
           test -s .github/alioth-PixelOS17-SukiSU-builtin-SUSFS-kernel.patch
           test -s .github/alioth-PixelOS17-SukiSU-builtin-hooks.patch
-          echo 'd7f2b8d818138029228f4af04cc525e8ecd6185340812d2febadb2b6c837ddf7  .github/alioth-PixelOS17-SukiSU-builtin-SUSFS-kernel.patch' | sha256sum -c -
+          test -s .github/alioth-SukiSU-builtin-4.19-compat.patch
+          echo '92363db982d5b62bf61236539cbc1dd72ead313f881d74c20df6995d77ab5f11  .github/alioth-PixelOS17-SukiSU-builtin-SUSFS-kernel.patch' | sha256sum -c -
           echo 'd46c41fde9c28b3f12e9c20f8727d468fe7f1e6aeb856734042558832a1be22e  .github/alioth-PixelOS17-SukiSU-builtin-hooks.patch' | sha256sum -c -
+          echo '0119be7376c84d774e73a9a5d25f0182a10dac1dbcc437b21aea47fc87dd1011  .github/alioth-SukiSU-builtin-4.19-compat.patch' | sha256sum -c -
       - name: Install build prerequisites
         run: |
           sudo apt-get update
@@ -56,6 +58,8 @@ jobs:
           git clone --filter=blob:none https://github.com/SukiSU-Ultra/SukiSU-Ultra.git KernelSU
           git -C KernelSU checkout b20dee702035af09cb2ecb5f35443bbc1747f3e6
           test "$(git -C KernelSU rev-parse HEAD)" = b20dee702035af09cb2ecb5f35443bbc1747f3e6
+          git -C KernelSU apply --check ../../.github/alioth-SukiSU-builtin-4.19-compat.patch
+          git -C KernelSU apply ../../.github/alioth-SukiSU-builtin-4.19-compat.patch
           ln -s ../KernelSU/kernel drivers/kernelsu
           echo 'obj-$(CONFIG_KSU) += kernelsu/' >> drivers/Makefile
           echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
