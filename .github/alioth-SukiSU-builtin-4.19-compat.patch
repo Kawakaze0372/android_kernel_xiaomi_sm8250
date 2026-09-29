@@ -31,3 +31,22 @@
 +#endif
  
  #endif
+--- a/kernel/runtime/ksud.c
++++ b/kernel/runtime/ksud.c
+@@ -51,6 +51,7 @@
+     pr_info("on_post_fs_data!\n");
+ 
+     ksu_load_allow_list();
++    track_throne(false);
+     ksu_observer_init();
+     // sanity check, this may influence the performance
+     stop_input_hook();
+@@ -90,7 +91,7 @@
+ {
+     ksu_boot_completed = true;
+     pr_info("on_boot_completed!\n");
+-    track_throne(true);
++    track_throne(false);
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+     ksu_selinux_hide_drop_backup_if_unused();
+ #endif
