@@ -28,8 +28,8 @@ jobs:
           test "$(git -C kernel rev-parse HEAD)" = 2fbe35cee4e6dffb4f64dc4a08a7a70255fe333e
           test -s .github/alioth-PixelOS17-SukiSU-builtin-SUSFS-kernel.patch
           test -s .github/alioth-PixelOS17-SukiSU-builtin-hooks.patch
-          echo '48b5188062e4d5851d0ddc4a3815a82799094df87fd141cf89df5217796888d3  .github/alioth-PixelOS17-SukiSU-builtin-SUSFS-kernel.patch' | sha256sum -c -
-          echo '6b9cdc303a3ba43d86d60c7592e58a4d417cbdc7cb75806faeb487fe38ffca8e  .github/alioth-PixelOS17-SukiSU-builtin-hooks.patch' | sha256sum -c -
+          echo 'c7fee7fea63852b139f50fa73858a21cfe22eabcc7dd8d2e46e695715d69a661  .github/alioth-PixelOS17-SukiSU-builtin-SUSFS-kernel.patch' | sha256sum -c -
+          echo '3a15324198830ea046ceafeefa6b7ef062263481f9cacc1708ce77e3792f8b42  .github/alioth-PixelOS17-SukiSU-builtin-hooks.patch' | sha256sum -c -
       - name: Install build prerequisites
         run: |
           sudo apt-get update
@@ -47,6 +47,10 @@ jobs:
           git apply ../.github/alioth-PixelOS17-SukiSU-builtin-SUSFS-kernel.patch
           git apply --check ../.github/alioth-PixelOS17-SukiSU-builtin-hooks.patch
           git apply ../.github/alioth-PixelOS17-SukiSU-builtin-hooks.patch
+          grep -Fq 'SYSCALL_DEFINE4(reboot, int, magic1, int, magic2' kernel/reboot.c
+          grep -Fq 'static DEFINE_IDA(susfs_mnt_id_ida);' fs/namespace.c
+          grep -Fq 'ksu_handle_faccessat(&dfd, &ksu_name, &mode, NULL);' fs/open.c
+          grep -Fq 'ksu_handle_stat(&dfd, &ksu_name, &flags);' fs/stat.c
           git clone --filter=blob:none https://gitlab.com/simonpunk/susfs4ksu.git "$RUNNER_TEMP/susfs"
           git -C "$RUNNER_TEMP/susfs" checkout 001e69919c6271f690fd00b17e4c721c9e599152
           test "$(git -C "$RUNNER_TEMP/susfs" rev-parse HEAD)" = 001e69919c6271f690fd00b17e4c721c9e599152
