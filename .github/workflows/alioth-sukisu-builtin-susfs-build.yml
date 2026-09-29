@@ -28,8 +28,8 @@ jobs:
           test "$(git -C kernel rev-parse HEAD)" = 2fbe35cee4e6dffb4f64dc4a08a7a70255fe333e
           test -s .github/alioth-PixelOS17-SukiSU-builtin-SUSFS-kernel.patch
           test -s .github/alioth-PixelOS17-SukiSU-builtin-hooks.patch
-          echo 'c7fee7fea63852b139f50fa73858a21cfe22eabcc7dd8d2e46e695715d69a661  .github/alioth-PixelOS17-SukiSU-builtin-SUSFS-kernel.patch' | sha256sum -c -
-          echo '3a15324198830ea046ceafeefa6b7ef062263481f9cacc1708ce77e3792f8b42  .github/alioth-PixelOS17-SukiSU-builtin-hooks.patch' | sha256sum -c -
+          echo 'd7f2b8d818138029228f4af04cc525e8ecd6185340812d2febadb2b6c837ddf7  .github/alioth-PixelOS17-SukiSU-builtin-SUSFS-kernel.patch' | sha256sum -c -
+          echo 'd46c41fde9c28b3f12e9c20f8727d468fe7f1e6aeb856734042558832a1be22e  .github/alioth-PixelOS17-SukiSU-builtin-hooks.patch' | sha256sum -c -
       - name: Install build prerequisites
         run: |
           sudo apt-get update
@@ -48,15 +48,11 @@ jobs:
           git apply --check ../.github/alioth-PixelOS17-SukiSU-builtin-hooks.patch
           git apply ../.github/alioth-PixelOS17-SukiSU-builtin-hooks.patch
           grep -Fq 'SYSCALL_DEFINE4(reboot, int, magic1, int, magic2' kernel/reboot.c
-          grep -Fq 'static DEFINE_IDA(susfs_mnt_id_ida);' fs/namespace.c
+          grep -Fq '#define SUSFS_MAGIC 0xFAFAFAFA' include/linux/susfs_def.h
+          grep -Fq 'void susfs_start_sdcard_monitor_fn(void)' include/linux/susfs.h
+          grep -Fq 'susfs_alloc_non_unshare_ksu_vfsmnt' fs/namespace.c
           grep -Fq 'ksu_handle_faccessat(&dfd, &ksu_name, &mode, NULL);' fs/open.c
           grep -Fq 'ksu_handle_stat(&dfd, &ksu_name, &flags);' fs/stat.c
-          git clone --filter=blob:none https://gitlab.com/simonpunk/susfs4ksu.git "$RUNNER_TEMP/susfs"
-          git -C "$RUNNER_TEMP/susfs" checkout 001e69919c6271f690fd00b17e4c721c9e599152
-          test "$(git -C "$RUNNER_TEMP/susfs" rev-parse HEAD)" = 001e69919c6271f690fd00b17e4c721c9e599152
-          cp "$RUNNER_TEMP/susfs/kernel_patches/fs/susfs.c" fs/
-          cp "$RUNNER_TEMP/susfs/kernel_patches/include/linux/susfs.h" include/linux/
-          cp "$RUNNER_TEMP/susfs/kernel_patches/include/linux/susfs_def.h" include/linux/
           git clone --filter=blob:none https://github.com/SukiSU-Ultra/SukiSU-Ultra.git KernelSU
           git -C KernelSU checkout b20dee702035af09cb2ecb5f35443bbc1747f3e6
           test "$(git -C KernelSU rev-parse HEAD)" = b20dee702035af09cb2ecb5f35443bbc1747f3e6

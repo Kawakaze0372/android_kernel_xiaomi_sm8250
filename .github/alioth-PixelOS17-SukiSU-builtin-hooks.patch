@@ -103,7 +103,7 @@
  		ret = vfs_read(f.file, buf, count, &pos);
 --- a/fs/stat.c
 +++ b/fs/stat.c
-@@ -147,6 +147,10 @@
+@@ -179,6 +179,10 @@
   *
   * 0 will be returned on success, and a -ve error code if unsuccessful.
   */
@@ -114,7 +114,7 @@
  int vfs_statx_fd(unsigned int fd, struct kstat *stat,
  		 u32 request_mask, unsigned int query_flags)
  {
-@@ -160,6 +164,10 @@
+@@ -192,6 +196,10 @@
  	if (f.file) {
  		error = vfs_getattr(&f.file->f_path, stat,
  				    request_mask, query_flags);
@@ -125,7 +125,7 @@
  		fdput(f);
  	}
  	return error;
-@@ -181,12 +189,23 @@
+@@ -213,12 +221,23 @@
   *
   * 0 will be returned on success, and a -ve error code if unsuccessful.
   */
@@ -149,7 +149,7 @@
  
  	if ((flags & ~(AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT |
  		       AT_EMPTY_PATH | KSTAT_QUERY_FLAGS)) != 0)
-@@ -200,7 +219,16 @@
+@@ -232,7 +251,16 @@
  		lookup_flags |= LOOKUP_EMPTY;
  
  retry:
