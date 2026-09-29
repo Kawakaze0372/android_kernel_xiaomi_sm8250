@@ -1,0 +1,122 @@
+name: Build PixelOS alioth SukiSU builtin SUSFS
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - name: Check out build files from personal fork
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: .github
+      - name: Check out exact PixelOS kernel source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: 2fbe35cee4e6dffb4f64dc4a08a7a70255fe333e
+          path: kernel
+      - name: Verify inputs
+        run: |
+          set -euo pipefail
+          test "$(git -C kernel rev-parse HEAD)" = 2fbe35cee4e6dffb4f64dc4a08a7a70255fe333e
+          test -s .github/alioth-PixelOS17-SukiSU-builtin-SUSFS-kernel.patch
+          test -s .github/alioth-PixelOS17-SukiSU-builtin-hooks.patch
+          echo '48b5188062e4d5851d0ddc4a3815a82799094df87fd141cf89df5217796888d3  .github/alioth-PixelOS17-SukiSU-builtin-SUSFS-kernel.patch' | sha256sum -c -
+          echo '6b9cdc303a3ba43d86d60c7592e58a4d417cbdc7cb75806faeb487fe38ffca8e  .github/alioth-PixelOS17-SukiSU-builtin-hooks.patch' | sha256sum -c -
+      - name: Install build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bc bison flex libssl-dev libelf-dev gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi zip
+      - name: Fetch Android Clang r596125
+        run: |
+          git clone --depth 1 --filter=blob:none --sparse https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 "$RUNNER_TEMP/aosp-clang"
+          git -C "$RUNNER_TEMP/aosp-clang" sparse-checkout set clang-r596125
+          "$RUNNER_TEMP/aosp-clang/clang-r596125/bin/clang" --version | head -n 1
+      - name: Apply reviewed PixelOS SUSFS and SukiSU hooks
+        working-directory: kernel
+        run: |
+          set -euo pipefail
+          git apply --check ../.github/alioth-PixelOS17-SukiSU-builtin-SUSFS-kernel.patch
+          git apply ../.github/alioth-PixelOS17-SukiSU-builtin-SUSFS-kernel.patch
+          git apply --check ../.github/alioth-PixelOS17-SukiSU-builtin-hooks.patch
+          git apply ../.github/alioth-PixelOS17-SukiSU-builtin-hooks.patch
+          git clone --filter=blob:none https://gitlab.com/simonpunk/susfs4ksu.git "$RUNNER_TEMP/susfs"
+          git -C "$RUNNER_TEMP/susfs" checkout 001e69919c6271f690fd00b17e4c721c9e599152
+          test "$(git -C "$RUNNER_TEMP/susfs" rev-parse HEAD)" = 001e69919c6271f690fd00b17e4c721c9e599152
+          cp "$RUNNER_TEMP/susfs/kernel_patches/fs/susfs.c" fs/
+          cp "$RUNNER_TEMP/susfs/kernel_patches/include/linux/susfs.h" include/linux/
+          cp "$RUNNER_TEMP/susfs/kernel_patches/include/linux/susfs_def.h" include/linux/
+          git clone --filter=blob:none https://github.com/SukiSU-Ultra/SukiSU-Ultra.git KernelSU
+          git -C KernelSU checkout b20dee702035af09cb2ecb5f35443bbc1747f3e6
+          test "$(git -C KernelSU rev-parse HEAD)" = b20dee702035af09cb2ecb5f35443bbc1747f3e6
+          ln -s ../KernelSU/kernel drivers/kernelsu
+          echo 'obj-$(CONFIG_KSU) += kernelsu/' >> drivers/Makefile
+          echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
+      - name: Configure alioth kernel
+        working-directory: kernel
+        run: |
+          set -euo pipefail
+          export PATH="$RUNNER_TEMP/aosp-clang/clang-r596125/bin:$PATH"
+          make O=out ARCH=arm64 LLVM=1 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- vendor/kona-perf_defconfig
+          scripts/kconfig/merge_config.sh -m -O out out/.config arch/arm64/configs/vendor/xiaomi/sm8250-common.config arch/arm64/configs/vendor/xiaomi/alioth.config
+          scripts/config --file out/.config -e KSU -e KSU_SUSFS -d KPM
+          make O=out ARCH=arm64 LLVM=1 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- olddefconfig
+          grep -qx 'CONFIG_KSU=y' out/.config
+          grep -qx 'CONFIG_KSU_SUSFS=y' out/.config
+          grep -qx 'CONFIG_THREAD_INFO_IN_TASK=y' out/.config
+          grep -qx 'CONFIG_MACH_XIAOMI_ALIOTH=y' out/.config
+      - name: Build Image
+        working-directory: kernel
+        run: |
+          set -euo pipefail
+          export PATH="$RUNNER_TEMP/aosp-clang/clang-r596125/bin:$PATH"
+          make -j4 O=out ARCH=arm64 LLVM=1 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- Image
+          test -s out/arch/arm64/boot/Image
+          grep -a -m1 'Linux version' out/arch/arm64/boot/Image | cut -c1-400 || true
+      - name: Package AnyKernel3 ZIP
+        run: |
+          set -euo pipefail
+          git clone --depth 1 https://github.com/osm0sis/AnyKernel3.git "$RUNNER_TEMP/AnyKernel3"
+          mkdir -p "$RUNNER_TEMP/AnyKernel3/kernels" artifacts
+          cp kernel/out/arch/arm64/boot/Image "$RUNNER_TEMP/AnyKernel3/kernels/Image"
+          cat > "$RUNNER_TEMP/AnyKernel3/anykernel.sh" <<'EOF'
+          # AnyKernel3 package for PixelOS 17 Redmi K40 / alioth
+          properties() { '
+          do.devicecheck=1
+          do.modules=0
+          do.systemless=1
+          do.cleanup=1
+          do.cleanuponabort=0
+          device.name1=alioth
+          device.name2=aliothin
+          supported.versions=
+          supported.patchlevels=
+          '; }
+          block=boot;
+          is_slot_device=auto;
+          ramdisk_compression=auto;
+          patch_vbmeta_flag=auto;
+          no_block_display=1
+          . tools/ak3-core.sh;
+          ui_print "PixelOS alioth SukiSU Ultra builtin + SUSFS";
+          mv "$home/kernels/Image" "$home/Image";
+          split_boot;
+          flash_boot;
+          EOF
+          cp kernel/out/arch/arm64/boot/Image artifacts/Image
+          cp kernel/out/.config artifacts/kernel.config
+          (cd "$RUNNER_TEMP/AnyKernel3" && zip -qr "$GITHUB_WORKSPACE/artifacts/alioth-PixelOS17-SukiSU-builtin-SUSFS-UNTESTED.zip" . -x '.git/*')
+          test -s artifacts/alioth-PixelOS17-SukiSU-builtin-SUSFS-UNTESTED.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: alioth-pixelos-sukisu-builtin-susfs-untested
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 1
