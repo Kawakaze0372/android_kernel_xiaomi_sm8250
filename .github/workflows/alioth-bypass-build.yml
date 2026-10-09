@@ -104,6 +104,7 @@ jobs:
           echo 'b219675d14865890565ceb8d7d3af9d860cbe39231bf50e192edc8de4792782f  .github/alioth-anykernel-working-template.zip' | sha256sum -c -
           mkdir -p "$RUNNER_TEMP/AnyKernel3" artifacts
           unzip -q .github/alioth-anykernel-working-template.zip -d "$RUNNER_TEMP/AnyKernel3"
+          chmod 755 "$RUNNER_TEMP/AnyKernel3/anykernel.sh" "$RUNNER_TEMP/AnyKernel3/META-INF/com/google/android/update-binary" "$RUNNER_TEMP/AnyKernel3/tools/"*
           cp kernel/out/arch/arm64/boot/Image "$RUNNER_TEMP/AnyKernel3/kernels/Image"
           test -s "$RUNNER_TEMP/AnyKernel3/tools/ak3-core.sh"
           test -s "$RUNNER_TEMP/AnyKernel3/META-INF/com/google/android/update-binary"
