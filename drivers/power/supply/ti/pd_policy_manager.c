@@ -1719,6 +1719,21 @@ static void usbpd_pm_workfunc(struct work_struct *work)
 	struct usbpd_pm *pdpm =
 		container_of(work, struct usbpd_pm, pm_work.work);
 	int internal = PM_WORK_RUN_NORMAL_INTERVAL;
+	struct votable *chg_disable = find_votable("CHG_DISABLE");
+
+	/* Keep the buck input path available, but never restart the pumps. */
+	if (chg_disable &&
+	    is_client_vote_enabled_locked(chg_disable, ALIOTH_BYPASS_VOTER)) {
+		usbpd_pm_enable_cp(pdpm, false);
+		if (pm_config.cp_sec_enable)
+			usbpd_pm_enable_cp_sec(pdpm, false);
+		usbpd_pm_enable_sw(pdpm, true);
+		usbpd_pm_move_state(pdpm, PD_PM_STATE_ENTRY);
+		if (pdpm->pd_active)
+			schedule_delayed_work(&pdpm->pm_work,
+					      msecs_to_jiffies(internal));
+		return;
+	}
 
 	usbpd_pm_update_sw_status(pdpm);
 	usbpd_pm_update_cp_status(pdpm);

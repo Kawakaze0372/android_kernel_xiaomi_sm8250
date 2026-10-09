@@ -9,6 +9,9 @@
 
 #include <linux/mutex.h>
 
+/* Shared by the alioth SMB5 and BQ2597x charging paths. */
+#define ALIOTH_BYPASS_VOTER "ALIOTH_BYPASS_VOTER"
+
 struct votable;
 
 enum votable_type {

@@ -311,10 +311,40 @@ static ssize_t thermal_fcc_override_store(struct device *dev, struct device_attr
 
 static DEVICE_ATTR_RW(thermal_fcc_override);
 
+#ifdef CONFIG_MACH_XIAOMI_ALIOTH
+static ssize_t bypass_charging_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct smb5 *chip = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+		is_client_vote_enabled_locked(chip->chg.chg_disable_votable,
+					      ALIOTH_BYPASS_VOTER));
+}
+
+static ssize_t bypass_charging_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct smb5 *chip = dev_get_drvdata(dev);
+	int enable, rc;
+
+	rc = kstrtoint(buf, 0, &enable);
+	if (rc || (enable != 0 && enable != 1))
+		return -EINVAL;
+
+	rc = smblib_set_bypass_charging(&chip->chg, enable);
+	return rc < 0 ? rc : count;
+}
+static DEVICE_ATTR_RW(bypass_charging);
+#endif
+
 static struct attribute *smb5_attrs[] = {
 	&dev_attr_pd_disabled.attr,
 	&dev_attr_weak_chg_icl_ua.attr,
 	&dev_attr_thermal_fcc_override.attr,
+#ifdef CONFIG_MACH_XIAOMI_ALIOTH
+	&dev_attr_bypass_charging.attr,
+#endif
 	NULL,
 };
 ATTRIBUTE_GROUPS(smb5);
@@ -5203,13 +5233,18 @@ static int smb5_remove(struct platform_device *pdev)
 	struct smb5 *chip = platform_get_drvdata(pdev);
 	struct smb_charger *chg = &chip->chg;
 
+	/* Stop new sysfs requests before releasing the bypass votes. */
+	sysfs_remove_groups(&chg->dev->kobj, smb5_groups);
+	if (is_client_vote_enabled_locked(chg->chg_disable_votable,
+					 ALIOTH_BYPASS_VOTER))
+		smblib_set_bypass_charging(chg, false);
+
 	/* force enable APSD */
 	smblib_masked_write(chg, USBIN_OPTIONS_1_CFG_REG,
 				BC1P2_SRC_DETECT_BIT, BC1P2_SRC_DETECT_BIT);
 
 	smb5_free_interrupts(chg);
 	smblib_deinit(chg);
-	sysfs_remove_groups(&chg->dev->kobj, smb5_groups);
 	platform_set_drvdata(pdev, NULL);
 
 	return 0;
@@ -5219,6 +5254,10 @@ static void smb5_shutdown(struct platform_device *pdev)
 {
 	struct smb5 *chip = platform_get_drvdata(pdev);
 	struct smb_charger *chg = &chip->chg;
+
+	if (is_client_vote_enabled_locked(chg->chg_disable_votable,
+					 ALIOTH_BYPASS_VOTER))
+		smblib_set_bypass_charging(chg, false);
 
 	/* disable all interrupts */
 	smb5_disable_interrupts(chg);

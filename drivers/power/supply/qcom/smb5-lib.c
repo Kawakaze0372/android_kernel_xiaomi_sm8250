@@ -3179,6 +3179,104 @@ int smblib_set_prop_input_suspend(struct smb_charger *chg,
 	return rc;
 }
 
+static int smblib_bypass_disable_pumps(struct smb_charger *chg)
+{
+	static const char * const names[] = {
+		"bq2597x-standalone", "bq2597x-master", "bq2597x-slave",
+	};
+	union power_supply_propval val = { .intval = 0 };
+	struct power_supply *psy;
+	bool found = false;
+	int i, rc;
+
+	for (i = 0; i < ARRAY_SIZE(names); i++) {
+		psy = power_supply_get_by_name(names[i]);
+		if (!psy)
+			continue;
+		found = true;
+		rc = power_supply_set_property(psy,
+				POWER_SUPPLY_PROP_CHARGING_ENABLED, &val);
+		power_supply_put(psy);
+		if (rc < 0)
+			return rc;
+	}
+
+	return chg->use_bq_pump && !found ? -ENODEV : 0;
+}
+
+static int smblib_bypass_clear_votes(struct smb_charger *chg)
+{
+	int rc, ret = 0;
+
+	rc = vote(chg->fcc_votable, ALIOTH_BYPASS_VOTER, false, 0);
+	if (rc < 0)
+		ret = rc;
+	rc = vote(chg->pl_disable_votable, ALIOTH_BYPASS_VOTER, false, 0);
+	if (rc < 0 && !ret)
+		ret = rc;
+	rc = vote(chg->chg_disable_votable, ALIOTH_BYPASS_VOTER, false, 0);
+	if (rc < 0 && !ret)
+		ret = rc;
+	return ret;
+}
+
+int smblib_set_bypass_charging(struct smb_charger *chg, bool enable)
+{
+	union power_supply_propval val = {0,};
+	int rc, restore_rc;
+
+	mutex_lock(&chg->bypass_lock);
+	if (!enable) {
+		rc = smblib_bypass_clear_votes(chg);
+		goto out;
+	}
+	if (is_client_vote_enabled_locked(chg->chg_disable_votable,
+					 ALIOTH_BYPASS_VOTER)) {
+		rc = 0;
+		goto out;
+	}
+
+	/* Do not override input suspension, OTG, or disconnected operation. */
+	rc = smblib_get_prop_usb_online(chg, &val);
+	if (rc < 0)
+		goto out;
+	if (!val.intval) {
+		rc = -ENODEV;
+		goto out;
+	}
+
+	/* This disables battery charging, not the USB input power path. */
+	rc = vote(chg->chg_disable_votable, ALIOTH_BYPASS_VOTER, true, 0);
+	if (rc < 0)
+		goto restore;
+	rc = vote(chg->pl_disable_votable, ALIOTH_BYPASS_VOTER, true, 0);
+	if (rc < 0)
+		goto restore;
+	rc = vote(chg->fcc_votable, ALIOTH_BYPASS_VOTER, true, 0);
+	if (rc < 0)
+		goto restore;
+	rc = smblib_bypass_disable_pumps(chg);
+	if (rc < 0)
+		goto restore;
+
+	/* Remove only the fast-charge policy's main-charger suspension. */
+	val.intval = 1;
+	rc = smblib_set_prop_battery_charging_enabled(chg, &val);
+	if (rc < 0)
+		goto restore;
+	goto out;
+
+restore:
+	restore_rc = smblib_bypass_clear_votes(chg);
+	if (restore_rc < 0)
+		smblib_err(chg, "Couldn't restore bypass votes rc=%d\n",
+			   restore_rc);
+out:
+	mutex_unlock(&chg->bypass_lock);
+	power_supply_changed(chg->batt_psy);
+	return rc;
+}
+
 int smblib_set_prop_battery_input_suspend(struct smb_charger *chg,
 		const union power_supply_propval *val)
 {
@@ -8320,6 +8418,14 @@ void smblib_usb_plugin_locked(struct smb_charger *chg)
 	}
 
 	chg->vbus_rising = (bool)(stat & USBIN_PLUGIN_RT_STS_BIT);
+	if (!chg->vbus_rising &&
+	    is_client_vote_enabled_locked(chg->chg_disable_votable,
+					  ALIOTH_BYPASS_VOTER)) {
+		rc = smblib_set_bypass_charging(chg, false);
+		if (rc < 0)
+			smblib_err(chg, "Couldn't clear bypass on detach rc=%d\n",
+				   rc);
+	}
 	smblib_set_opt_switcher_freq(chg, chg->vbus_rising ? chg->chg_freq.freq_5V :
 						chg->chg_freq.freq_removal);
 	schedule_work(&chg->plugin_check_time_work);
@@ -12414,6 +12520,7 @@ int smblib_init(struct smb_charger *chg)
 	chg->connector_temp_pre = 0;
 
 	mutex_init(&chg->smb_lock);
+	mutex_init(&chg->bypass_lock);
 	mutex_init(&chg->irq_status_lock);
 	mutex_init(&chg->dcin_aicl_lock);
 	mutex_init(&chg->dpdm_lock);

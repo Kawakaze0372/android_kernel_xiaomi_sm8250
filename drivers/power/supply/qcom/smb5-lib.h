@@ -591,6 +591,7 @@ struct smb_charger {
 
 	/* locks */
 	struct mutex		smb_lock;
+	struct mutex		bypass_lock;
 	struct mutex		ps_change_lock;
 	struct mutex		irq_status_lock;
 	struct mutex		dcin_aicl_lock;
@@ -1293,6 +1294,7 @@ int smblib_get_fastcharge_mode(struct smb_charger *chg);
 int smblib_set_fastcharge_iterm(struct smb_charger *chg, int iterm);
 struct usbpd *smb_get_usbpd(void);
 int smblib_init(struct smb_charger *chg);
+int smblib_set_bypass_charging(struct smb_charger *chg, bool enable);
 int smblib_deinit(struct smb_charger *chg);
 int smblib_get_prop_wireless_fw_version(struct smb_charger *chg,
 				     union power_supply_propval *val);

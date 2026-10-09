@@ -34,6 +34,7 @@
 #include <linux/debugfs.h>
 #include <linux/bitops.h>
 #include <linux/math64.h>
+#include <linux/pmic-voter.h>
 #include "bq25970_reg.h"
 /*#include "bq2597x.h"*/
 
@@ -490,6 +491,16 @@ static int bq2597x_enable_charge(struct bq2597x *bq, bool enable)
 {
 	int ret;
 	u8 val;
+	struct votable *chg_disable;
+
+	/* Serialize with the explicit disable after the SMB5 bypass vote. */
+	mutex_lock(&bq->charging_disable_lock);
+	chg_disable = find_votable("CHG_DISABLE");
+	if (enable && chg_disable &&
+	    is_client_vote_enabled_locked(chg_disable, ALIOTH_BYPASS_VOTER)) {
+		ret = -EBUSY;
+		goto out;
+	}
 
 	if (enable)
 		val = BQ2597X_CHG_ENABLE;
@@ -500,6 +511,8 @@ static int bq2597x_enable_charge(struct bq2597x *bq, bool enable)
 
 	ret = bq2597x_update_bits(bq, BQ2597X_REG_0C, BQ2597X_CHG_EN_MASK, val);
 
+out:
+	mutex_unlock(&bq->charging_disable_lock);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(bq2597x_enable_charge);
@@ -2158,10 +2171,13 @@ static int bq2597x_charger_set_property(struct power_supply *psy,
 					const union power_supply_propval *val)
 {
 	struct bq2597x *bq = power_supply_get_drvdata(psy);
+	int rc;
 
 	switch (prop) {
 	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
-		bq2597x_enable_charge(bq, val->intval);
+		rc = bq2597x_enable_charge(bq, val->intval);
+		if (rc < 0)
+			return rc;
 		bq2597x_check_charge_enabled(bq, &bq->charge_enabled);
 		bq_info("POWER_SUPPLY_PROP_CHARGING_ENABLED: %s\n",
 			val->intval ? "enable" : "disable");
